@@ -7,6 +7,86 @@ These helpers flatten it into clean dicts that are easy for agents to work with.
 
 from __future__ import annotations
 
+import re
+from html import unescape
+from html.parser import HTMLParser
+from urllib.parse import urlparse
+from bs4 import BeautifulSoup
+
+
+def _zoom_links(description: str | None) -> list[str]:
+    """Return Zoom join links explicitly present in exported event text/HTML."""
+    if not isinstance(description, str):
+        return []
+    links = []
+    for match in re.findall(r'https?://[^\s<>"\']+', unescape(description)):
+        url = match.rstrip('.,;:!?)')
+        try:
+            host = (urlparse(url).hostname or '').lower()
+        except ValueError:
+            continue
+        if (host == 'zoom.us' or host.endswith('.zoom.us')) and url not in links:
+            links.append(url)
+    return links
+
+
+class _TextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+
+def calendar_passcodes(description: str | None) -> list[str]:
+    """Extract explicitly labelled passcodes; do not infer them from Zoom URL tokens."""
+    parser = _TextExtractor()
+    parser.feed(description or "")
+    text = " ".join(parser.parts)
+    return list(dict.fromkeys(re.findall(
+        r"(?i)\b(?:passcode|password)\s*:\s*([^\s<>,;]+)", text
+    )))
+
+
+def public_zoom_meetings(page: str) -> list[dict]:
+    """Read recognized Zoom cards from Indico's public videoconference page."""
+    soup = BeautifulSoup(page, "html.parser")
+    container = soup.select_one(".vc-room-list")
+    if container is None:
+        return []
+    meetings = []
+    scope, linked_title = "unknown", None
+    for child in container.find_all(recursive=False):
+        if "event-service-association-title" in child.get("class", []):
+            subtitle = child.select_one(".event-service-association-subtitle")
+            label = subtitle.get_text(" ", strip=True).lower() if subtitle else ""
+            scope = {"event": "event", "session": "session", "contribution": "contribution"}.get(label, "unknown")
+            if subtitle:
+                subtitle.extract()
+            linked_title = child.get_text(" ", strip=True) or None
+        elif child.name == "ind-vc-room-segment" and child.select_one("ind-vc-zoom-join-button"):
+            room = child.select_one(".vc-room-name")
+            field = child.select_one('input[name^="vc-room-url-"]')
+            urls = _zoom_links(field.get("value", "")) if field else []
+            item = {"scope": scope}
+            if linked_title:
+                item["linked_title"] = linked_title
+            if room:
+                item["name"] = room.get_text(" ", strip=True)
+            if urls:
+                item["join_url"] = urls[0]
+            for header in child.select(".item > .header"):
+                if header.get_text(" ", strip=True).casefold() == "passcode":
+                    parent = header.parent
+                    header.extract()
+                    value = parent.get_text(" ", strip=True)
+                    if value:
+                        item["passcode"] = value
+                    break
+            meetings.append(item)
+    return meetings
+
 
 def _date_str(d: dict | str | None) -> str | None:
     """Convert Indico {date, time, tz} dict or plain string to ISO-ish string."""

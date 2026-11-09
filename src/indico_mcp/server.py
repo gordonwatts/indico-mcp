@@ -42,11 +42,15 @@ from typing import Annotated, Any
 from dotenv import load_dotenv
 from fastmcp import FastMCP
 from pydantic import Field
+from icalendar import Calendar
 
 from .client import IndicoClient, IndicoError
 from .config import Config
 from .models import (
     extract_results,
+    _zoom_links,
+    calendar_passcodes,
+    public_zoom_meetings,
     normalize_attachment,
     normalize_contribution,
     normalize_event,
@@ -145,6 +149,7 @@ deployment.
   finding a recurring talk slot): get_category_contributions — one API call instead
   of one call per event. Use this whenever you need to aggregate over a meeting series.
 - **Single event agenda:** get_event_details or get_event_sessions
+- **Zoom information:** get_event_zoom_info
 - For very large outputs, prefer small chunks using `limit` + `offset` where available.
 
 ## Downloading files
@@ -474,6 +479,74 @@ async def get_event_details(
         include_contribution_attachments=include_attachments,
         include_note=True,
     )
+
+
+@app.tool()
+async def get_event_zoom_info(
+    event_id: Annotated[int, Field(description="Indico event ID.")],
+    instance: Annotated[str | None, _instance_field()] = None,
+) -> dict:
+    """Get available Zoom links and passcodes for one event.
+
+    Looks for links in the event description and the permission-filtered category
+    calendar export, where the Zoom plugin can add join URLs, and the public
+    videoconference page. Public page results include event/session/contribution
+    attribution where recognized. Calendar/description links and passcodes are
+    unscoped and must not be assumed to apply to the entire event. The public
+    page is anonymous and its HTML or localization may prevent recognition.
+    A missing link or passcode does not establish that no meeting exists. Treat
+    join URLs and passcodes as sensitive and share only as requested by the user.
+    """
+    client = _client(instance)
+    try:
+        data = await client.export(f"event/{event_id}", detail="events", tz="UTC")
+    except IndicoError as e:
+        raise ValueError(str(e)) from e
+    results = extract_results(data)
+    if not results:
+        raise ValueError(f"Event {event_id} not found or not accessible.")
+    raw = results[0]
+    description = raw.get("description") or ""
+    links = _zoom_links(description)
+    passcodes = calendar_passcodes(description)
+    status = "unavailable"
+    start = raw.get("startDate")
+    end = raw.get("endDate")
+    category_id = raw.get("categoryId")
+    if isinstance(start, dict) and isinstance(end, dict) and category_id is not None and raw.get("url"):
+        try:
+            from_date = date_.fromisoformat(start["date"]) - timedelta(days=2)
+            to_date = date_.fromisoformat(end["date"]) + timedelta(days=2)
+            status = "not_found_within_scan_limit"
+            for offset in range(0, 5000, 1000):
+                ics = await client.category_calendar(int(category_id), **{
+                    "from": from_date.isoformat(), "to": to_date.isoformat(),
+                    "limit": 1000, "offset": offset, "order": "id"
+                })
+                calendar = Calendar.from_ical(ics)
+                matching = [component for component in calendar.walk("VEVENT")
+                            if str(component.get("URL", "")).rstrip("/") == str(raw["url"]).rstrip("/")]
+                if len(matching) > 1:
+                    status = "event_not_uniquely_found"
+                    break
+                if matching:
+                    calendar_description = str(matching[0].get("DESCRIPTION", ""))
+                    links = list(dict.fromkeys(links + _zoom_links(calendar_description)))
+                    passcodes = list(dict.fromkeys(passcodes + calendar_passcodes(calendar_description)))
+                    status = "matched"
+                    break
+        except (IndicoError, ValueError, KeyError, TypeError, OverflowError):
+            status = "unavailable"
+    try:
+        page = await client.public_videoconference_page(event_id)
+        public_meetings = public_zoom_meetings(page)
+        page_status = "recognized" if public_meetings else "no_recognized_zoom"
+    except IndicoError:
+        public_meetings, page_status = [], "unavailable"
+    result = {k: raw[k] for k in ("id", "title", "url") if raw.get(k) is not None}
+    result.update({"zoom_links": links, "passcodes": passcodes, "calendar_export_status": status,
+                   "public_videoconferences": public_meetings, "public_page_status": page_status})
+    return result
 
 
 @app.tool()

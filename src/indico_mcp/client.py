@@ -90,6 +90,30 @@ class IndicoClient:
 
         return resp.json()
 
+    async def category_calendar(self, category_id: int, **params: object) -> bytes:
+        """Fetch a permission-filtered category iCalendar using the configured token."""
+        try:
+            resp = await self._http.get(
+                f"{self._base_url}/export/categ/{category_id}.ics", params=params
+            )
+        except httpx.RequestError as exc:
+            raise IndicoError("Unable to reach the calendar export.") from exc
+        if not resp.is_success or "text/calendar" not in resp.headers.get("content-type", "").lower():
+            raise IndicoError("Calendar export unavailable or access denied.", resp.status_code)
+        return resp.content
+
+    async def public_videoconference_page(self, event_id: int) -> str:
+        """Read the public event page without forwarding token or session cookies."""
+        try:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=False,
+                                         headers={"Accept-Language": "en"}) as client:
+                resp = await client.get(f"{self._base_url}/event/{event_id}/videoconference/")
+        except httpx.RequestError as exc:
+            raise IndicoError("Public videoconference page unavailable.") from exc
+        if not resp.is_success or "text/html" not in resp.headers.get("content-type", "").lower():
+            raise IndicoError("Public videoconference page unavailable.", resp.status_code)
+        return resp.text
+
     async def api(self, path: str, **params: object) -> dict:
         """
         GET /api/{path}
