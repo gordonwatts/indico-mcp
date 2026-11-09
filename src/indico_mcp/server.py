@@ -150,6 +150,7 @@ deployment.
   of one call per event. Use this whenever you need to aggregate over a meeting series.
 - **Single event agenda:** get_event_details or get_event_sessions
 - **Zoom information:** get_event_zoom_info
+- **Calendar event times:** get_event_calendar_info
 - For very large outputs, prefer small chunks using `limit` + `offset` where available.
 
 ## Downloading files
@@ -462,6 +463,7 @@ async def get_event_details(
 
     Returns event title, description, dates, location, built-in minutes when
     available, and all contributions (including their minutes when available).
+    start_datetime and end_datetime include the time zone used by the export.
     """
     client = _client(instance)
     try:
@@ -479,6 +481,29 @@ async def get_event_details(
         include_contribution_attachments=include_attachments,
         include_note=True,
     )
+
+
+@app.tool()
+async def get_event_calendar_info(
+    event_id: Annotated[int, Field(description="Indico event ID.")],
+    instance: Annotated[str | None, _instance_field()] = None,
+) -> dict:
+    """Get event title, Indico URL and time-zone-aware times for a calendar entry.
+
+    Requests UTC to avoid ambiguous local times at daylight-saving transitions.
+    Interpret each date_time using its own timezone field, which can differ
+    from the event's configured timezone. Missing time zones must not be guessed.
+    """
+    client = _client(instance)
+    try:
+        data = await client.export(f"event/{event_id}", detail="events", tz="UTC")
+    except IndicoError as e:
+        raise ValueError(str(e)) from e
+    results = extract_results(data)
+    if not results:
+        raise ValueError(f"Event {event_id} not found or not accessible.")
+    event = normalize_event(results[0])
+    return {k: event[k] for k in ("id", "title", "url", "timezone", "start_datetime", "end_datetime") if k in event}
 
 
 @app.tool()

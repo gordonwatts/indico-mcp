@@ -135,6 +135,10 @@ def normalize_event(
     }
     if include_note and raw.get("note"):
         event["note"] = raw["note"]
+    for name, source in (("start_datetime", "startDate"), ("end_datetime", "endDate")):
+        value = raw.get(source)
+        if isinstance(value, dict) and value.get("date") and value.get("time"):
+            event[name] = {"date_time": f"{value['date']}T{value['time']}", "timezone": value.get("tz")}
     if include_contributions and "contributions" in raw:
         event["contributions"] = [
             normalize_contribution(
