@@ -15,6 +15,7 @@ Works with any Indico instance — configure multiple instances simultaneously a
 | `search_category_events` | List events in a category, filtered by date range and keyword |
 | `get_category_contributions` | All contributions from every event in a category within a date range, in a single API call |
 | `get_event_details` | Full event metadata including all contributions |
+| `get_event_calendar_info` | Event dates, time zones, and link for a calendar entry |
 | `get_event_contributions` | Paginated contributions (`items` + `pagination`): speakers, abstract, duration, track, session |
 | `get_event_sessions` | Session structure with nested contributions (full agenda view) |
 | `search_events_by_keyword` | Full-text search across events |
@@ -160,6 +161,9 @@ get_event_contributions(event_id=1234567, limit=100, offset=0, instance="cern")
 # Full session/agenda structure of a conference
 get_event_sessions(event_id=9876543, instance="su")
 
+# Event times and Indico link for a calendar entry
+get_event_calendar_info(event_id=1689553, instance="cern")
+
 # Full-text search
 search_events_by_keyword("dark matter", instance="cern")
 
@@ -184,6 +188,8 @@ download_attachment(download_url="https://indico.cern.ch/event/.../file.pdf")
 The server uses the [Indico HTTP Export API](https://docs.getindico.io/en/stable/http-api/) (`/export/`) with `detail=contributions` and `detail=sessions` query parameters to retrieve structured agenda data. Authentication uses a standard `Authorization: Bearer <token>` header. The `/api/` endpoints in Indico are write-only (POST); all read operations go through `/export/`.
 
 File attachments are discovered via the `folders` structure included in the export API response, which provides direct download URLs, filenames, content types, and sizes. Downloads are authenticated with the same Bearer token and saved locally (to a temp directory by default, or a specified path). Maximum file size is 100 MB.
+
+Event results include the event's configured `timezone` and `start_datetime` / `end_datetime` pairs with the zone used by the export. These can differ: use the zone on each timestamp, not the event's zone, to interpret it. `get_event_calendar_info` requests UTC timestamps to avoid ambiguous local times during daylight-saving transitions. If a timestamp's zone is absent, do not assume one.
 
 ## Data Sensitivity & Privacy
 
