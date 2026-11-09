@@ -185,6 +185,8 @@ The server uses the [Indico HTTP Export API](https://docs.getindico.io/en/stable
 
 File attachments are discovered via the `folders` structure included in the export API response, which provides direct download URLs, filenames, content types, and sizes. Downloads are authenticated with the same Bearer token and saved locally (to a temp directory by default, or a specified path). Maximum file size is 100 MB.
 
+If a standard event attachment URL returns HTTP 403 while a token is configured, the client retries through Indico's Classic API file-export endpoint. The display URL may require a browser session even when the API token can read the file. Indico still checks the attachment's access permissions on the export endpoint; a token does not grant access beyond its user's permissions.
+
 ## Data Sensitivity & Privacy
 
 Indico agendas and their attachments may contain **sensitive or confidential

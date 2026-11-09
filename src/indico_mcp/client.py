@@ -11,6 +11,7 @@ Authentication: Authorization: Bearer <token>
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from urllib.parse import urlparse
 
 import httpx
@@ -202,6 +203,27 @@ class IndicoClient:
 
         try:
             resp = await self._http.get(url)
+            # Display attachment routes use a browser session. The Classic API's
+            # file export checks the same attachment ACL using the token instead.
+            # Retry only recognized attachment routes on this configured instance.
+            if (
+                resp.status_code == 403
+                and "Authorization" in self._http.headers
+                and urlparse(str(resp.url)).netloc == self._base_host
+            ):
+                base_path = urlparse(self._base_url).path.rstrip("/")
+                match = re.fullmatch(
+                    re.escape(base_path) + r"/event/(?P<event>\d+)/"
+                    r"(?:(?:contributions/\d+/(?:subcontributions/\d+/)?|sessions/\d+/))?"
+                    r"attachments/(?P<folder>\d+)/(?P<attachment>\d+)/[^/]+",
+                    parsed.path,
+                )
+                if match:
+                    export_url = (
+                        f"{self._base_url}/export/event/{match['event']}/material/"
+                        f"{match['folder']}/{match['attachment']}.bin"
+                    )
+                    resp = await self._http.get(export_url)
         except httpx.RequestError as exc:
             raise IndicoError(f"Network error downloading file: {exc}") from exc
 
