@@ -15,6 +15,7 @@ Works with any Indico instance — configure multiple instances simultaneously a
 | `search_category_events` | List events in a category, filtered by date range and keyword |
 | `get_category_contributions` | All contributions from every event in a category within a date range, in a single API call |
 | `get_event_details` | Full event metadata including all contributions |
+| `get_event_zoom_info` | Available Zoom links and visible passcodes |
 | `get_event_contributions` | Paginated contributions (`items` + `pagination`): speakers, abstract, duration, track, session |
 | `get_event_sessions` | Session structure with nested contributions (full agenda view) |
 | `search_events_by_keyword` | Full-text search across events |
@@ -160,6 +161,9 @@ get_event_contributions(event_id=1234567, limit=100, offset=0, instance="cern")
 # Full session/agenda structure of a conference
 get_event_sessions(event_id=9876543, instance="su")
 
+# Available Zoom details for an event
+get_event_zoom_info(event_id=1689553, instance="cern")
+
 # Full-text search
 search_events_by_keyword("dark matter", instance="cern")
 
@@ -185,6 +189,8 @@ The server uses the [Indico HTTP Export API](https://docs.getindico.io/en/stable
 
 File attachments are discovered via the `folders` structure included in the export API response, which provides direct download URLs, filenames, content types, and sizes. Downloads are authenticated with the same Bearer token and saved locally (to a temp directory by default, or a specified path). Maximum file size is 100 MB.
 
+`get_event_zoom_info` finds Zoom links and explicitly labelled passcodes in event descriptions and the permission-filtered category iCalendar export. Those links may apply to a session or contribution, so they are not attributed to the entire event. `public_videoconferences` separately reports recognized Zoom cards, visible passcodes and event/session/contribution labels from the public videoconference page. This page is requested anonymously without forwarding the configured token or browser cookies, and its HTML is not a stable API; localized or changed markup may not be recognized. Authenticated-only page details are not retrieved by this fallback. An embedded Zoom URL token is not a separate passcode. An empty list does not establish that there is no meeting or passcode. `calendar_export_status` indicates whether the event was uniquely matched within up to five pages of 1,000 events, and `public_page_status` reports whether Zoom cards were recognized; either source can be unavailable or incomplete. Join URLs and passcodes can be sensitive and are sent to the LLM when this tool is called.
+
 ## Data Sensitivity & Privacy
 
 Indico agendas and their attachments may contain **sensitive or confidential
@@ -194,7 +200,7 @@ restricted-access talks, personnel matters, and similar content.
 ### What gets sent to the LLM provider
 
 When an AI assistant calls tools such as `get_event_details`,
-`get_event_contributions`, `get_event_sessions`, or `list_event_attachments`,
+`get_event_contributions`, `get_event_sessions`, `get_event_zoom_info`, or `list_event_attachments`,
 the returned data (titles, abstracts, speaker names, descriptions) is forwarded
 to the underlying language model. If you are using a cloud-hosted LLM provider
 (e.g. Anthropic Claude, OpenAI GPT), **this data leaves your local machine** and
