@@ -202,6 +202,8 @@ Event results include the event's configured `timezone` and `start_datetime` / `
 
 For a calendar entry containing both Indico and Zoom links, use `get_event_calendar_info` for the event times and link, then `get_event_zoom_info` for available meeting details. Check the Zoom room's scope before using it for the whole event.
 
+If a standard event attachment URL returns HTTP 403 while a token is configured, the client retries through Indico's Classic API file-export endpoint. The display URL may require a browser session even when the API token can read the file. Indico still checks the attachment's access permissions on the export endpoint; a token does not grant access beyond its user's permissions.
+
 ## Data Sensitivity & Privacy
 
 Indico agendas and their attachments may contain **sensitive or confidential
