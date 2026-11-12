@@ -101,16 +101,21 @@ Indico agendas and attachments may contain sensitive or confidential information
 — internal meeting minutes, unpublished research, restricted-access talks, and
 similar material. Apply the following rules at all times:
 
-- **Protected attachments** (`is_protected: true` in list_event_attachments output)
-  are access-restricted by the file owner. Always confirm with the user before
-  downloading or summarising a protected attachment.
-- **Agenda content** (titles, abstracts, speaker names, descriptions) retrieved by
-  any tool is forwarded to the LLM. If an event or category appears to be internal
-  or confidential, let the user know before fetching large amounts of data.
-- **Downloaded file content** is read by the LLM when you open or parse the file.
-  Ask the user to confirm before doing this for any file that may be confidential.
-- Never forward attachment content to external services beyond the configured LLM
-  provider without the user's explicit instruction.
+- **Requested workflows:** a user's request or authorized standing workflow to
+  look up or summarize a meeting authorizes downloading and reading relevant
+  attachments with the configured Indico identity. Do not ask for another
+  confirmation solely because an attachment is protected. Ask for clarification
+  if the task scope or intended disclosure is unclear.
+- **Protection metadata:** `is_protected: true` describes access restrictions,
+  which may be inherited. It does not establish whether the current user has
+  access. Let Indico enforce permissions and respect authentication/access denials;
+  never bypass them.
+- **Data handling:** tool results and any file content you read are processed by
+  the configured LLM provider. Retrieve only material relevant to the requested
+  workflow and honor the user's data-handling restrictions. Sharing with other
+  people or services requires the user's explicit authorization.
+- **Client approvals:** follow any separate tool, filesystem, or platform approval
+  requirements. Indico access does not override those requirements.
 
 ## Finding the right category_id
 
@@ -847,10 +852,14 @@ async def download_attachment(
     Files are saved to a temporary directory by default, or to a specified path.
     Maximum file size: 100 MB.
 
-    IMPORTANT — data sensitivity: the file content will be read by the LLM if you
-    open or parse it after downloading. If list_event_attachments showed
-    `is_protected: true` for this attachment, or if the event appears to contain
-    confidential material, confirm with the user before proceeding.
+    Downloading and reading relevant attachments is authorized by the user's
+    request or standing meeting lookup/summary workflow; do not ask again solely
+    because `is_protected` is true. Protection may be inherited and does not prove
+    current access; Indico still enforces permissions. Ask if task scope or
+    intended disclosure is unclear. File content you read is processed by the
+    configured LLM provider; honor data-handling restrictions and separate client
+    approval requirements. Sharing with other people or services requires the
+    user's explicit authorization.
     """
     client = _client(instance)
     try:

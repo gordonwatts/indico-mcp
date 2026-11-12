@@ -228,8 +228,18 @@ file, the file content is forwarded to the LLM provider.
 - Verify your organisation's data-handling and AI-usage policies.
 - For confidential or proprietary material, prefer a locally-hosted LLM.
 - Attachments with `is_protected: true` in `list_event_attachments` output are
-  explicitly access-restricted by the owner — require explicit user approval
-  before downloading or summarising them.
+  subject to access restrictions, which may be inherited from a folder or event.
+  The flag does not establish whether the current user has access; Indico checks
+  the configured identity's permissions when the file is requested.
+- A user's request or authorized standing workflow to look up or summarize a
+  meeting authorizes downloading and reading relevant attachments. The server's
+  instructions do not require another confirmation solely because a file is
+  protected. Ask for clarification when task scope or intended disclosure is
+  unclear, and honor the user's data-handling restrictions.
+- Separate client/tool approval policies may still require confirmation. This
+  guidance does not change those policies or Indico access controls. Sharing
+  material with other people or services requires the user's explicit
+  authorization.
 
 ### Token and access control
 
