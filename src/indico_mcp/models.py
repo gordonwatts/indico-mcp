@@ -112,6 +112,16 @@ def _person_name(p: dict) -> str:
     return name or p.get("name", "")
 
 
+def normalize_note(raw: dict) -> dict:
+    """Keep note content and metadata, preserving the exported HTML unchanged."""
+    note = {
+        "html": raw.get("html"),
+        "url": raw.get("url"),
+        "modified": raw.get("modified_dt"),
+    }
+    return {k: v for k, v in note.items() if v is not None}
+
+
 def normalize_event(
     raw: dict,
     include_contributions: bool = False,
@@ -134,7 +144,7 @@ def normalize_event(
         "description": raw.get("description") or None,
     }
     if include_note and raw.get("note"):
-        event["note"] = raw["note"]
+        event["note"] = normalize_note(raw["note"]) or None
     for name, source in (("start_datetime", "startDate"), ("end_datetime", "endDate")):
         value = raw.get(source)
         if isinstance(value, dict) and value.get("date") and value.get("time"):
@@ -142,14 +152,18 @@ def normalize_event(
     if include_contributions and "contributions" in raw:
         event["contributions"] = [
             normalize_contribution(
-                c, include_attachments=include_contribution_attachments
+                c,
+                include_attachments=include_contribution_attachments,
+                include_note=include_note,
             )
             for c in raw["contributions"]
         ]
     return {k: v for k, v in event.items() if v is not None}
 
 
-def normalize_contribution(raw: dict, include_attachments: bool = False) -> dict:
+def normalize_contribution(
+    raw: dict, include_attachments: bool = False, include_note: bool = False
+) -> dict:
     """Flatten a contribution from the export API."""
     speakers = [_person_name(p) for p in raw.get("speakers", [])]
     authors = [_person_name(p) for p in raw.get("primaryauthors", [])]
@@ -175,18 +189,23 @@ def normalize_contribution(raw: dict, include_attachments: bool = False) -> dict
         "speakers": speakers or None,
         "authors": authors or None,
         "abstract": raw.get("description") or None,
-        "note": raw.get("note") or None,
         "keywords": raw.get("keywords") or None,
         "attachments": attachments or None,
     }
+    if include_note and raw.get("note"):
+        contrib["note"] = normalize_note(raw["note"]) or None
     return {k: v for k, v in contrib.items() if v is not None}
 
 
-def normalize_session(raw: dict, include_attachments: bool = False) -> dict:
+def normalize_session(
+    raw: dict, include_attachments: bool = False, include_note: bool = False
+) -> dict:
     """Flatten a session from the export API."""
     conveners = [_person_name(p) for p in raw.get("conveners", [])]
     contributions = [
-        normalize_contribution(c, include_attachments=include_attachments)
+        normalize_contribution(
+            c, include_attachments=include_attachments, include_note=include_note
+        )
         for c in raw.get("contributions", [])
     ]
 
@@ -198,9 +217,10 @@ def normalize_session(raw: dict, include_attachments: bool = False) -> dict:
         "location": raw.get("location"),
         "room": raw.get("roomFullname") or raw.get("room"),
         "conveners": conveners or None,
-        "note": raw.get("note") or None,
         "contributions": contributions or None,
     }
+    if include_note and raw.get("note"):
+        session["note"] = normalize_note(raw["note"]) or None
     return {k: v for k, v in session.items() if v is not None}
 
 

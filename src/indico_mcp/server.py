@@ -3,12 +3,15 @@
 Indico MCP Server
 
 Tools:
+  list_instances             — list configured instances and the default
   search_categories          — find categories by name (returns ID + breadcrumb path)
   find_events_by_title       — search event titles across the whole instance; reveals category IDs
   browse_category            — list direct subcategories of a category by ID
   search_category_events     — list events in a category, filtered by date/keyword
   get_category_contributions — all contributions across events in a category (single call)
   get_event_details          — full event metadata + contributions
+  get_event_calendar_info    — event link and time-zone-aware calendar times
+  get_event_zoom_info        — accessible Zoom links and meeting details
   get_event_contributions    — flat list of contributions for an event
   get_event_sessions         — sessions with nested contributions (full agenda)
   search_events_by_keyword   — full-text search via Indico search API
@@ -370,12 +373,15 @@ async def get_category_contributions(
     offset: Annotated[int, Field(description="Pagination offset for retrieving further results.")] = 0,
     include_attachments: Annotated[bool, Field(description="If true, include contribution attachment metadata in each result.")] = False,
     instance: Annotated[str | None, _instance_field()] = None,
+    include_notes: Annotated[bool, Field(description="If true, include built-in contribution minutes. Defaults to false to keep category-wide results compact.")] = False,
 ) -> list[dict]:
     """
     Get contributions from ALL events in a category within an optional date range, in a single API call.
 
     Returns a flat list of contributions, each annotated with event_id, event_title, and event_start
     so you know which event each contribution belongs to.
+
+    Built-in minutes are omitted unless include_notes is true.
 
     This is far more efficient than listing events and calling get_event_contributions for each one.
     Use it for: finding all talks by a speaker across a series of meetings, analysing themes across
@@ -404,7 +410,9 @@ async def get_category_contributions(
         event_ctx = normalize_event_header(event)
         for raw_contrib in event.get("contributions", []):
             contrib = normalize_contribution(
-                raw_contrib, include_attachments=include_attachments
+                raw_contrib,
+                include_attachments=include_attachments,
+                include_note=include_notes,
             )
             contrib.update(event_ctx)
             contributions.append(contrib)
@@ -457,6 +465,7 @@ async def get_event_details(
     event_id: Annotated[int, Field(description="Indico event ID.")],
     include_attachments: Annotated[bool, Field(description="If true, include contribution attachment metadata in the event output.")] = False,
     instance: Annotated[str | None, _instance_field()] = None,
+    include_notes: Annotated[bool, Field(description="Include built-in event and contribution minutes (default true). Set false to omit notes throughout the result.")] = True,
 ) -> dict:
     """
     Get full metadata for an event, including its list of contributions.
@@ -464,6 +473,7 @@ async def get_event_details(
     Returns event title, description, dates, location, built-in minutes when
     available, and all contributions (including their minutes when available).
     start_datetime and end_datetime include the time zone used by the export.
+    Set include_notes to false to omit both event and contribution minutes.
     """
     client = _client(instance)
     try:
@@ -479,7 +489,7 @@ async def get_event_details(
         results[0],
         include_contributions=True,
         include_contribution_attachments=include_attachments,
-        include_note=True,
+        include_note=include_notes,
     )
 
 
@@ -581,12 +591,14 @@ async def get_event_contributions(
     offset: Annotated[int, Field(description="Pagination offset for retrieving further results.")] = 0,
     include_attachments: Annotated[bool, Field(description="If true, include attachment metadata for each contribution.")] = False,
     instance: Annotated[str | None, _instance_field()] = None,
+    include_notes: Annotated[bool, Field(description="Include built-in contribution minutes (default true). Set false for compact results.")] = True,
 ) -> dict:
     """
     List contributions for an event.
 
     Each contribution includes: title, speakers, authors, start time, duration,
     session, track, abstract/description, room, and built-in minutes when available.
+    Set include_notes to false to omit minutes.
 
     Returns both `items` and pagination metadata so partial results are explicit.
     Use `has_more` / `next_offset` to retrieve additional pages.
@@ -606,7 +618,9 @@ async def get_event_contributions(
     page_limit = min(limit, 1000)
     end = start + page_limit
     items = [
-        normalize_contribution(c, include_attachments=include_attachments)
+        normalize_contribution(
+            c, include_attachments=include_attachments, include_note=include_notes
+        )
         for c in raw_contribs[start:end]
     ]
 
@@ -630,6 +644,7 @@ async def get_event_sessions(
     event_id: Annotated[int, Field(description="Indico event ID.")],
     include_attachments: Annotated[bool, Field(description="If true, include attachment metadata for contributions inside each session.")] = False,
     instance: Annotated[str | None, _instance_field()] = None,
+    include_notes: Annotated[bool, Field(description="Include built-in session-block and nested contribution minutes (default true). Set false to omit all notes.")] = True,
 ) -> list[dict]:
     """
     Get the session structure for an event, with each session's contributions nested inside.
@@ -637,6 +652,7 @@ async def get_event_sessions(
     Useful for understanding how an event agenda is organised into parallel tracks or blocks.
     Each session block includes title, conveners, times, room, built-in minutes
     when available, and its contributions (including their minutes).
+    Set include_notes to false to omit notes from both blocks and contributions.
     """
     client = _client(instance)
     try:
@@ -650,7 +666,9 @@ async def get_event_sessions(
 
     raw_sessions = results[0].get("sessions", [])
     return [
-        normalize_session(s, include_attachments=include_attachments)
+        normalize_session(
+            s, include_attachments=include_attachments, include_note=include_notes
+        )
         for s in raw_sessions
     ]
 

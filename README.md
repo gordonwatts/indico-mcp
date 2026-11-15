@@ -159,6 +159,12 @@ get_event_contributions(event_id=1234567, instance="cern")
 # Built-in event minutes appear in the note field (note.html contains HTML)
 get_event_details(event_id=1574842, instance="cern")
 
+# Omit minutes from the event and all nested contributions
+get_event_details(event_id=1574842, include_notes=False, instance="cern")
+
+# Category-wide contribution listings omit minutes unless explicitly requested
+get_category_contributions(category_id=72, include_notes=True, instance="cern")
+
 # Continue with paging using `pagination.next_offset`
 get_event_contributions(event_id=1234567, limit=100, offset=0, instance="cern")
 
@@ -195,7 +201,20 @@ The server uses the [Indico HTTP Export API](https://docs.getindico.io/en/stable
 
 File attachments are discovered via the `folders` structure included in the export API response, which provides direct download URLs, filenames, content types, and sizes. Downloads are authenticated with the same Bearer token and saved locally (to a temp directory by default, or a specified path). Maximum file size is 100 MB.
 
-Built-in minutes are separate from file attachments. When present, the export API's `note` object is included in event details, contributions, and session blocks; its `html` field contains the formatted minutes. Use `get_event_details` for event minutes, `get_event_contributions` for contribution minutes, and `get_event_sessions` for session-block and nested contribution minutes. Category event listings omit event notes to keep results compact. Availability depends on what the instance exports and the caller can access.
+Built-in minutes are separate from file attachments. When present, a normalized `note` object is included in event details, contributions, and session blocks; its `html` field contains the formatted minutes. Use `get_event_details` for event minutes, `get_event_contributions` for contribution minutes, and `get_event_sessions` for session-block and nested contribution minutes. Category event listings omit event notes to keep results compact. Availability depends on what the instance exports and the caller can access.
+
+Notes contain `html` (unchanged export HTML), `url`, and `modified` (the export's
+`modified_dt` timestamp), when available. The export's numeric `user` ID and
+other fields are omitted. Missing or null fields and empty note objects are
+omitted. HTML is passed through without sanitization or conversion; consumers
+that render it should apply their own HTML sanitization.
+
+`include_notes` defaults to `True` on those three detailed tools; set it to
+`False` to omit notes throughout the returned structure, including nested
+contributions. `get_category_contributions` defaults to `include_notes=False`
+to keep category-wide results compact, with explicit opt-in using `True`.
+Note inclusion is independent of `include_attachments`. This controls the MCP
+output; it does not exclude notes from Indico's underlying export response.
 
 `get_event_zoom_info` finds Zoom links and explicitly labelled passcodes in event descriptions and the permission-filtered category iCalendar export. Those links may apply to a session or contribution, so they are not attributed to the entire event. `public_videoconferences` separately reports recognized Zoom cards, visible passcodes and event/session/contribution labels from the public videoconference page. This page is requested anonymously without forwarding the configured token or browser cookies, and its HTML is not a stable API; localized or changed markup may not be recognized. Authenticated-only page details are not retrieved by this fallback. An embedded Zoom URL token is not a separate passcode. An empty list does not establish that there is no meeting or passcode. `calendar_export_status` indicates whether the event was uniquely matched within up to five pages of 1,000 events, and `public_page_status` reports whether Zoom cards were recognized; either source can be unavailable or incomplete. Join URLs and passcodes can be sensitive and are sent to the LLM when this tool is called.
 Event results include the event's configured `timezone` and `start_datetime` / `end_datetime` pairs with the zone used by the export. These can differ: use the zone on each timestamp, not the event's zone, to interpret it. `get_event_calendar_info` requests UTC timestamps to avoid ambiguous local times during daylight-saving transitions. If a timestamp's zone is absent, do not assume one.
@@ -253,7 +272,30 @@ duplicate booking.
 
 Feature requests and bug reports are welcome. Contributions are especially encouraged from Indico users who can test new functionality against a real instance before submitting a pull request — the Indico API has enough instance-to-instance variation that untested changes are hard to review reliably.
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to set up a development environment, run the tests, and get a pull request merged.
+
 Substantial contributions will be recognised by adding the contributor as an author.
+
+## Contributors
+
+Everyone who contributes is credited here, following the [all-contributors](https://allcontributors.org) specification ([emoji key](https://allcontributors.org/docs/en/emoji-key)).
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+<table>
+  <tbody>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/cohm"><img src="https://avatars.githubusercontent.com/u/7143813?v=4?s=80" width="80px;" alt="Christian Ohm"/><br /><sub><b>Christian Ohm</b></sub></a><br /><a href="https://github.com/cohm/indico-mcp/commits?author=cohm" title="Code">💻</a> <a href="https://github.com/cohm/indico-mcp/commits?author=cohm" title="Documentation">📖</a> <a href="#maintenance-cohm" title="Maintenance">🚧</a> <a href="https://github.com/cohm/indico-mcp/pulls?q=is%3Apr+reviewed-by%3Acohm" title="Reviewed Pull Requests">👀</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/The-Ludwig"><img src="https://avatars.githubusercontent.com/u/31670556?v=4?s=80" width="80px;" alt="Ludwig Neste"/><br /><sub><b>Ludwig Neste</b></sub></a><br /><a href="https://github.com/cohm/indico-mcp/commits?author=The-Ludwig" title="Code">💻</a> <a href="https://github.com/cohm/indico-mcp/commits?author=The-Ludwig" title="Documentation">📖</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
 
 ## License
 
